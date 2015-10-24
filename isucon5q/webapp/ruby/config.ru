@@ -1,7 +1,11 @@
 require_relative './app.rb'
-require 'rack-lineprof'
 
-use Rack::Lineprof if ENV["ENABLE_LINEPROF"]
+if ENV["ENABLE_LINEPROF"]
+  require 'rack-lineprof'
+  use Rack::Lineprof
+end
+
+require 'stackprof'
 use StackProf::Middleware, enabled: true,
                            mode: :cpu,
                            interval: 1000,
