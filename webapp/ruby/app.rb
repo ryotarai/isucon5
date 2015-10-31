@@ -30,7 +30,6 @@ class Isucon5f::WebApp < Sinatra::Base
   Endpoint = Struct.new(:token_type, :token_key, :uri)
 
   ENDPOINTS = {
-    'ken' =>  Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/%s'),
     'ken2' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/'),
     'surname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/surname'),
     'givenname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/givenname'),
@@ -239,7 +238,13 @@ SQL
 
     data = []
 
-    arg.each_pair do |service, conf|
+    arg.each_pair do |service_orig, conf|
+      service =
+        if service_orig == 'ken'.freeze
+          'ken2'
+        else
+          service_orig
+        end
       endpoint = ENDPOINTS.fetch(service)
       headers = {}
       params = (conf['params'] && conf['params'].dup) || {}
@@ -247,8 +252,10 @@ SQL
       when 'header' then headers[endpoint.token_key] = conf['token']
       when 'param' then params[endpoint.token_key] = conf['token']
       end
-      uri = sprintf(endpoint.uri, *conf['keys'])
-      data << {"service" => service, "data" => fetch_api_with_cache(service, uri, headers, params)}
+      if service_orig == 'ken'.freeze
+        params['zipcode'] = conf['keys'][0]
+      end
+      data << {"service" => service, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
     end
 
     json data
