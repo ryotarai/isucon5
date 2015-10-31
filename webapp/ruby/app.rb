@@ -126,7 +126,7 @@ class Isucon5f::WebApp < Sinatra::Base
     def load_users
       last_id = 0
       loop do
-        db.exec_params('SELECT id, email, grade FROM users WHERE id > $1 ORDER BY id LIMIT 1000', [last_id]) do |result|
+        db.exec_params('SELECT id, email, grade FROM users WHERE id > $1 ORDER BY id LIMIT 2000', [last_id]) do |result|
           if result.cmd_tuples == 0
             REDIS_CLIENT.set("last_user_id", last_id)
             return
