@@ -30,6 +30,9 @@ class Isucon5f::WebApp < Sinatra::Base
   CLIENT = HTTPClient.new
   CLIENT.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
+  # redis is thread-safe
+  REDIS_CLIENT = Redis.new(host: 'localhost', port: 6379)
+
   helpers do
     def config
       @config ||= {
@@ -55,14 +58,6 @@ class Isucon5f::WebApp < Sinatra::Base
       )
       Thread.current[:isucon5_db] = conn
       conn
-    end
-
-    def redis
-      # redis is thread-safe
-      @redis ||= Redis.new(
-        host: 'localhost',
-        port: 6379,
-      )
     end
 
     def authenticate(email, password)
@@ -213,12 +208,12 @@ SQL
     case service
     when 'ken2'
       cache_key = "ken2:#{params['zipcode']}"
-      data = redis.get(cache_key)
+      data = REDIS_CLIENT.get(cache_key)
       if data
         JSON.parse(data)
       else
         data = fetch_api(method, uri, headers, params)
-        redis.set(cache_key, JSON.dump(data))
+        REDIS_CLIENT.set(cache_key, JSON.dump(data))
         data
       end
     else
