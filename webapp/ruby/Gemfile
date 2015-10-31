@@ -5,6 +5,7 @@ gem "sinatra-contrib"
 gem "pg"
 gem "erubis"
 gem "unicorn"
+gem "puma"
 gem "httpclient"
 gem 'redis'
 gem 'hiredis'
