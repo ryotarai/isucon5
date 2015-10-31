@@ -79,38 +79,50 @@ class Isucon5f::WebApp < Sinatra::Base
     end
 
     def authenticate(email, password)
-      query = <<SQL
-SELECT id, email, grade FROM users WHERE email=$1 AND passhash=digest(salt || $2, 'sha512')
-SQL
-      user = nil
-      db.exec_params(query, [email, password]) do |result|
-        result.each do |tuple|
-          user = {id: tuple['id'].to_i, email: tuple['email'], grade: tuple['grade']}
-        end
+      user_id = REDIS_CLIENT.get("email:#{email}:#{password}")
+      unless user_id
+        return
       end
-      session[:user_id] = user[:id] if user
+      h = REDIS_CLIENT.hgetall("user:#{user_id}")
+      user = {id: h['id'].to_i, email: h['email'], grade: h['grade']}
+      session[:user_id] = user[:id]
       user
     end
 
     def current_user
       return @user if @user
       return nil unless session[:user_id]
+      h = REDIS_CLIENT.hgetall("user:#{params[:user_id]}")
       @user = nil
-      db.exec_params('SELECT id,email,grade FROM users WHERE id=$1', [session[:user_id]]) do |r|
-        r.each do |tuple|
-          @user = {id: tuple['id'].to_i, email: tuple['email'], grade: tuple['grade']}
-        end
+      if h
+        @user = {id: h['id'].to_i, email: h['email'], grade: h['grade']}
+      else
+        session.clear
       end
-      session.clear unless @user
-      @user
     end
 
-    def generate_salt
-      salt = ''
-      32.times do
-        salt << SALT_CHARS[rand(SALT_CHARS.size)]
+    def save_user(id, email, password, grade)
+      key = "user:#{id}"
+      REDIS_CLIENT.hset(key, 'email', email)
+      REDIS_CLIENT.hset(key, 'grade', grade)
+      REDIS_CLIENT.set("email:#{email}:#{password}", id)
+    end
+
+    def load_users
+      last_id = 0
+      loop do
+        db.exec_params('SELECT id, email, grade FROM users WHERE id > $1 ORDER BY id LIMIT 1000', [last_id]) do |result|
+          if result.cmd_tuples == 0
+            REDIS_CLIENT.set("last_user_id", last_id)
+            return
+          end
+          result.each do |tuple|
+            id = tuple['id'].to_i
+            save_user(id, tuple['email'], tuple['email'].split('@', 2)[0], tuple['grade'])
+            last_id = id
+          end
+        end
       end
-      salt
     end
 
     def put_subscriptions(user_id, arg)
@@ -130,18 +142,13 @@ SQL
 
   post '/signup' do
     email, password, grade = params['email'], params['password'], params['grade']
-    salt = generate_salt
-    insert_user_query = <<SQL
-INSERT INTO users (email,salt,passhash,grade) VALUES ($1,$2,digest($3 || $4, 'sha512'),$5) RETURNING id
-SQL
-    default_arg = {}
-    insert_subscription_query = <<SQL
-INSERT INTO subscriptions (user_id,arg) VALUES ($1,$2)
-SQL
-    db.transaction do |conn|
-      user_id = conn.exec_params(insert_user_query, [email,salt,salt,password,grade]).values.first.first
-      put_subscriptions(user_id, default_arg)
+    REDIS_CLIENT.multi do
+      user_id = REDIS_CLIENT.get('last_user_id') + 1
+      save_user(user_id, email, password, grade)
+      REDIS_CLIENT.incr('last_user_id')
     end
+    default_arg = {}
+    put_subscriptions(user_id, default_arg)
     redirect '/login'
   end
 
@@ -302,9 +309,11 @@ SQL
     file = File.expand_path("../../sql/initialize.sql", __FILE__)
     system("psql", "-f", file, "isucon5f")
 
+    REDIS_CLIENT.flushdb
     db.exec_params('SELECT user_id,arg FROM subscriptions').values.each do |user_id, arg|
       put_subscriptions(user_id, JSON.parse(arg))
     end
+    load_users
 
     'ok'
   end
