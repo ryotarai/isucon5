@@ -112,6 +112,15 @@ SQL
       end
       salt
     end
+
+    def put_subscriptions(user_id, arg)
+      REDIS_CLIENT.set("subscriptions:#{user_id}", JSON.dump(arg))
+    end
+
+    def fetch_subscriptions(user_id)
+      json = REDIS_CLIENT.get("subscriptions:#{user_id}")
+      JSON.parse(json)
+    end
   end
 
   get '/signup' do
@@ -131,7 +140,7 @@ INSERT INTO subscriptions (user_id,arg) VALUES ($1,$2)
 SQL
     db.transaction do |conn|
       user_id = conn.exec_params(insert_user_query, [email,salt,salt,password,grade]).values.first.first
-      conn.exec_params(insert_subscription_query, [user_id, default_arg.to_json])
+      put_subscriptions(user_id, default_arg)
     end
     redirect '/login'
   end
@@ -171,13 +180,7 @@ SQL
   get '/modify' do
     user = current_user
     halt 403 unless user
-
-    # subscriptionsはRedisに突っ込めそう
-    query = <<SQL
-SELECT arg FROM subscriptions WHERE user_id=$1
-SQL
-    arg = db.exec_params(query, [user[:id]]).values.first[0]
-    erb :modify, locals: {user: user, arg: arg}
+    erb :modify, locals: {user: user}
   end
 
   post '/modify' do
@@ -189,25 +192,17 @@ SQL
     keys = params.has_key?("keys") ? params["keys"].strip.split(/\s+/) : nil
     param_name = params.has_key?("param_name") ? params["param_name"].strip : nil
     param_value = params.has_key?("param_value") ? params["param_value"].strip : nil
-    # select ... for updateは行ロックする
-    select_query = <<SQL
-SELECT arg FROM subscriptions WHERE user_id=$1 FOR UPDATE
-SQL
-    update_query = <<SQL
-UPDATE subscriptions SET arg=$1 WHERE user_id=$2
-SQL
-    db.transaction do |conn|
-      arg_json = conn.exec_params(select_query, [user[:id]]).values.first[0]
-      arg = JSON.parse(arg_json)
-      arg[service] ||= {}
-      arg[service]['token'] = token if token
-      arg[service]['keys'] = keys if keys
-      if param_name && param_value
-        arg[service]['params'] ||= {}
-        arg[service]['params'][param_name] = param_value
-      end
-      conn.exec_params(update_query, [arg.to_json, user[:id]])
+
+    arg = get_subscriptions(user[:id])
+    arg[service] ||= {}
+    arg[service]['token'] = token if token
+    arg[service]['keys'] = keys if keys
+    if param_name && param_value
+      arg[service]['params'] ||= {}
+      arg[service]['params'][param_name] = param_value
     end
+    put_subscriptions(user[:id], arg)
+
     redirect '/modify'
   end
 
@@ -282,5 +277,11 @@ SQL
   get '/initialize' do
     file = File.expand_path("../../sql/initialize.sql", __FILE__)
     system("psql", "-f", file, "isucon5f")
+
+    db.exec_params('SELECT user_id,arg FROM subscriptions').values.each do |user_id, arg|
+      put_subscriptions(user_id, JSON.parse(arg))
+    end
+
+    'ok'
   end
 end
