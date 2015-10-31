@@ -28,6 +28,17 @@ class Isucon5f::WebApp < Sinatra::Base
 
   SALT_CHARS = [('a'..'z'),('A'..'Z'),('0'..'9')].map(&:to_a).reduce(&:+)
 
+  Endpoint = Struct.new(:token_type, :token_key, :uri)
+
+  ENDPOINTS = {
+    'ken2' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/'),
+    'surname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/surname'),
+    'givenname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/givenname'),
+    'tenki' => Endpoint.new('param', 'zipcode', 'http://api.five-final.isucon.net:8988/'),
+    'perfectsec' => Endpoint.new('header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/tokens'),
+    'perfectsec_attacked' => Endpoint.new('header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/attacked_list'),
+  }
+
   CLIENT = HTTPClient.new
   CLIENT.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
@@ -137,49 +148,6 @@ class Isucon5f::WebApp < Sinatra::Base
       end
       Oj.load(json)
     end
-
-    def normalize_conf(service, conf)
-      case service
-      when 'ken'
-        {
-          'uri' => 'http://api.five-final.isucon.net:8080/',
-          'params' => { 'zipcode' =>  conf['keys'][0] },
-          'headers' => {},
-        }
-      when 'ken2'
-        {
-          'uri' => 'http://api.five-final.isucon.net:8080/',
-          'params' => { 'zipcode' =>  conf['params']['zipcode'] },
-          'headers' => {},
-        }
-      when 'surname', 'givenname'
-        {
-          'uri' => "http://api.five-final.isucon.net:8081/#{service}",
-          'params' => { 'q' => conf['params']['q'] },
-          'headers' => {},
-        }
-      when 'tenki'
-        {
-          'uri' => 'http://api.five-final.isucon.net:8988/',
-          'params' => { 'zipcode' => conf['token'] },
-          'headers' => {},
-        }
-      when 'perfectsec'
-        {
-          'uri' => 'https://api.five-final.isucon.net:8443/tokens',
-          'params' => {},
-          'headers' => { 'X-PERFECT-SECURITY-TOKEN' => conf['token'] },
-        }
-      when 'perfectsec_attacked'
-        {
-          'uri' => 'https://api.five-final.isucon.net:8443/attacked_list',
-          'params' => {},
-          'headers' => { 'X-PERFECT-SECURITY-TOKEN' => conf['token'] },
-        }
-      else
-        raise "Unknown service #{service}"
-      end
-    end
   end
 
   get '/signup' do
@@ -248,14 +216,13 @@ class Isucon5f::WebApp < Sinatra::Base
     param_value = params.has_key?("param_value") ? params["param_value"].strip : nil
 
     arg = fetch_subscriptions(user[:id])
-    conf = arg[service] || {}
-    conf['token'] = token if token
-    conf['keys'] = keys if keys
+    arg[service] ||= {}
+    arg[service]['token'] = token if token
+    arg[service]['keys'] = keys if keys
     if param_name && param_value
-      conf['params'] ||= {}
-      conf['params'][param_name] = param_value
+      arg[service]['params'] ||= {}
+      arg[service]['params'][param_name] = param_value
     end
-    arg[service] = normalize_conf(conf)
     put_subscriptions(user[:id], arg)
 
     redirect '/modify'
@@ -334,19 +301,26 @@ class Isucon5f::WebApp < Sinatra::Base
           else
             service_orig
           end
+      endpoint = ENDPOINTS.fetch(service)
 
-      uri = conf['uri']
-      params = conf['params']
-      headers = conf['headers']
+      headers = {}
+      params = (conf['params'] && conf['params'].dup) || {}
+      case endpoint.token_type
+        when 'header' then headers[endpoint.token_key] = conf['token']
+        when 'param' then params[endpoint.token_key] = conf['token']
+      end
+      if service_orig == 'ken'.freeze
+        params['zipcode'] = conf['keys'][0]
+      end
 
-      if uri.match(/^https:/)
+      if endpoint.uri.match(/^https:/)
         # HTTPSは 429 Too Many Requestsがくるので並列化しない
-        data << {"service" => service_orig, "data" => fetch_api_with_cache(service, uri, headers, params)}
+        data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
       else
         # HTTPは並列化する
         command = Expeditor::Command.new(service: EXPEDITOR_SERVICE) do
           begin
-           {"service" => service_orig, "data" => fetch_api_with_cache(service, uri, headers, params)}
+           {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
           rescue => e
             STDERR.puts(e)
             STDERR.puts(e.backtrace.join("\n"))
@@ -371,12 +345,7 @@ class Isucon5f::WebApp < Sinatra::Base
 
     REDIS_CLIENT.flushdb
     db.exec_params('SELECT user_id,arg FROM subscriptions').values.each do |user_id, arg|
-      services = Oj.load(arg)
-      services.keys.each do |service|
-        conf = services[service]
-        services[service] = normalize_conf(service, conf)
-      end
-      put_subscriptions(user_id, services)
+      put_subscriptions(user_id, Oj.load(arg))
     end
     load_users
 
