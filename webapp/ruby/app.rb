@@ -6,6 +6,7 @@ require 'erubis'
 require 'json' # ojのほうがはやそう
 require 'httpclient'
 require 'openssl'
+require 'redis'
 
 # bundle config build.pg --with-pg-config=<path to pg_config>
 # bundle install
@@ -54,6 +55,14 @@ class Isucon5f::WebApp < Sinatra::Base
       )
       Thread.current[:isucon5_db] = conn
       conn
+    end
+
+    def redis
+      # redis is thread-safe
+      @redis ||= Redis.new(
+        host: 'localhost',
+        port: 6379,
+      )
     end
 
     def authenticate(email, password)
@@ -200,6 +209,23 @@ SQL
     JSON.parse(res)
   end
 
+  def fetch_api_with_cache(service, method, uri, headers, params)
+    case service
+    when 'ken2'
+      cache_key = "ken2:#{params['zipcode']}"
+      data = redis.get(cache_key)
+      if data
+        JSON.parse(data)
+      else
+        data = fetch_api(method, uri, headers, params)
+        redis.set(cache_key, JSON.dump(data))
+        data
+      end
+    else
+      fetch_api(method, uri, headers, params)
+    end
+  end
+
   get '/data' do
     unless user = current_user
       halt 403
@@ -222,7 +248,7 @@ SQL
       when 'param' then params[token_key] = conf['token']
       end
       uri = sprintf(uri_template, *conf['keys'])
-      data << {"service" => service, "data" => fetch_api(method, uri, headers, params)}
+      data << {"service" => service, "data" => fetch_api_with_cache(service, method, uri, headers, params)}
     end
 
     json data
