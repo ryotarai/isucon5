@@ -254,7 +254,7 @@ SQL
     arg_json = db.exec_params("SELECT arg FROM subscriptions WHERE user_id=$1", [user[:id]]).values.first[0]
     arg = JSON.parse(arg_json)
 
-    commands = []
+    data = []
 
     arg.each_pair do |service_orig, conf|
       service =
@@ -265,38 +265,18 @@ SQL
           end
       endpoint = ENDPOINTS.fetch(service)
 
-      expeditor_service = endpoint.uri.match(/^https:/) ? Expeditor::Services.default : EXPEDITOR_SERVICE
-      command = Expeditor::Command.new(service: expeditor_service, timeout: 5) do
-        begin
-          headers = {}
-          params = (conf['params'] && conf['params'].dup) || {}
-          case endpoint.token_type
-            when 'header' then headers[endpoint.token_key] = conf['token']
-            when 'param' then params[endpoint.token_key] = conf['token']
-          end
-          if service_orig == 'ken'.freeze
-            params['zipcode'] = conf['keys'][0]
-          end
-          {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
-        rescue StandardError => e
-          # Expeditor::DependencyErrorはエラーをもってないっぽいのでここで
-          puts e
-          puts e.backtrace.join("\n")
-          raise e
-        end
+      headers = {}
+      params = (conf['params'] && conf['params'].dup) || {}
+      case endpoint.token_type
+        when 'header' then headers[endpoint.token_key] = conf['token']
+        when 'param' then params[endpoint.token_key] = conf['token']
       end
-      commands << command
+      if service_orig == 'ken'.freeze
+        params['zipcode'] = conf['keys'][0]
+      end
+      data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
     end
-
-    master = Expeditor::Command.new(timeout: 10, dependencies: commands) do |*result|
-        result
-    end
-    master.start_with_retry(
-        tries: 3,
-        sleep: 0.5,
-        on: [StandardError],
-    )
-    json master.get
+    json data
   end
 
   get '/initialize' do
