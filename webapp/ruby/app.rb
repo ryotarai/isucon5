@@ -267,7 +267,7 @@ class Isucon5f::WebApp < Sinatra::Base
       cache_key = "#{service}:#{params['zipcode']}"
       validator = proc do |data|
         # TODO: Time#parse is maybe slow
-        (Time.now.to_f - Time.parse(data['date']).to_f) < 2.0
+        (Time.now.to_f - Time.parse(data['date']).to_f) < 2.8
       end
       cache_json(cache_key, validator) do
         fetch_api(uri, headers, params)
