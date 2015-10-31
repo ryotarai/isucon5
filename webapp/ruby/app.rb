@@ -344,14 +344,19 @@ class Isucon5f::WebApp < Sinatra::Base
 
   get '/initialize' do
     file = File.expand_path("../../sql/initialize.sql", __FILE__)
+    $stderr.puts "#{Time.now} Initializing DB..."
     system("psql", "-f", file, "isucon5f")
 
+    $stderr.puts "#{Time.now} Flushing Redis..."
     REDIS_CLIENT.flushdb
+    $stderr.puts "#{Time.now} Importing subscriptions"
     db.exec_params('SELECT user_id,arg FROM subscriptions').values.each do |user_id, arg|
       put_subscriptions(user_id, Oj.load(arg))
     end
+    $stderr.puts "#{Time.now} Importing users"
     load_users
 
+    $stderr.puts "#{Time.now} Finish"
     'ok'
   end
 end
