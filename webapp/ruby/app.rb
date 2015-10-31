@@ -30,7 +30,7 @@ class Isucon5f::WebApp < Sinatra::Base
   Endpoint = Struct.new(:token_type, :token_key, :uri)
 
   ENDPOINTS = {
-    'ken' =>  Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/'),
+    'ken' =>  Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/%s'),
     'ken2' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/'),
     'surname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/surname'),
     'givenname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/givenname'),
