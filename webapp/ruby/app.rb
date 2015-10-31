@@ -3,7 +3,7 @@ require 'sinatra/contrib'
 require 'pg'
 require 'tilt/erubis'
 require 'erubis'
-require 'json' # ojのほうがはやそう
+require 'oj'
 require 'httpclient'
 require 'openssl'
 require 'redis'
@@ -135,12 +135,12 @@ class Isucon5f::WebApp < Sinatra::Base
     end
 
     def put_subscriptions(user_id, arg)
-      REDIS_CLIENT.set("subscriptions:#{user_id}", JSON.dump(arg))
+      REDIS_CLIENT.set("subscriptions:#{user_id}", Oj.dump(arg))
     end
 
     def fetch_subscriptions(user_id)
       json = REDIS_CLIENT.get("subscriptions:#{user_id}")
-      JSON.parse(json)
+      Oj.load(json)
     end
   end
 
@@ -226,13 +226,13 @@ class Isucon5f::WebApp < Sinatra::Base
     t0 = Time.now
     res = CLIENT.get_content(uri, params, headers)
     puts "#{Time.now - t0} - #{uri} - #{res}"
-    JSON.parse(res)
+    Oj.load(res)
   end
 
   def cache_json(cache_key, validator = nil)
     cached = REDIS_CLIENT.get(cache_key)
     if cached
-      data = JSON.parse(cached)
+      data = Oj.load(cached)
 
       valid = true
       if validator
@@ -247,7 +247,7 @@ class Isucon5f::WebApp < Sinatra::Base
     end
 
     data = yield
-    REDIS_CLIENT.set(cache_key, JSON.dump(data))
+    REDIS_CLIENT.set(cache_key, Oj.dump(data))
     data
   end
 
@@ -339,7 +339,7 @@ class Isucon5f::WebApp < Sinatra::Base
 
     REDIS_CLIENT.flushdb
     db.exec_params('SELECT user_id,arg FROM subscriptions').values.each do |user_id, arg|
-      put_subscriptions(user_id, JSON.parse(arg))
+      put_subscriptions(user_id, Oj.load(arg))
     end
     load_users
 

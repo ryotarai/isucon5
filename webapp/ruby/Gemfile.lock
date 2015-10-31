@@ -16,6 +16,7 @@ GEM
     httpclient (2.6.0.1)
     kgio (2.10.0)
     multi_json (1.11.2)
+    oj (2.13.0)
     pg (0.18.3)
     rack (1.6.4)
     rack-lineprof (0.0.3)
@@ -61,6 +62,7 @@ DEPENDENCIES
   expeditor
   hiredis
   httpclient
+  oj
   pg
   rack-lineprof
   redis

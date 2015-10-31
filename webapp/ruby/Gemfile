@@ -9,6 +9,7 @@ gem "httpclient"
 gem 'redis'
 gem 'hiredis'
 gem 'expeditor'
+gem 'oj'
 
 gem 'stackprof'
 gem 'rack-lineprof'
