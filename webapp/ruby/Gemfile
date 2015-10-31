@@ -13,3 +13,5 @@ gem 'oj'
 
 gem 'stackprof'
 gem 'rack-lineprof'
+
+gem 'dotenv'
