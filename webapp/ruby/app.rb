@@ -207,7 +207,9 @@ SQL
   end
 
   def fetch_api(uri, headers, params)
+    t0 = Time.now
     res = CLIENT.get_content(uri, params, headers)
+    puts "#{Time.now - t0} - #{uri} - #{res}"
     JSON.parse(res)
   end
 
@@ -248,6 +250,8 @@ SQL
 
     data = []
 
+    commands = []
+
     arg.each_pair do |service_orig, conf|
       service =
           if service_orig == 'ken'.freeze
@@ -266,8 +270,31 @@ SQL
       if service_orig == 'ken'.freeze
         params['zipcode'] = conf['keys'][0]
       end
-      data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
+
+      if endpoint.uri.match(/^https:/)
+        # HTTPSは 429 Too Many Requestsがくるので並列化しない
+        data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
+      else
+        # HTTPは並列化する
+        commands << Expeditor::Command.new(service: EXPEDITOR_SERVICE) do
+          begin
+          data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
+          rescue => e
+            STDERR.puts(e)
+            STDERR.puts(e.backtrace.join("\n"))
+            raise e
+          end
+          nil
+        end
+      end
     end
+
+    master = Expeditor::Command.new(dependencies: commands, service: EXPEDITOR_SERVICE) do
+      # noop
+    end
+    master.start
+    master.get
+
     json data
   end
 
