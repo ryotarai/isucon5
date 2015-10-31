@@ -2,12 +2,14 @@ require 'dotenv'
 Dotenv.load
 
 require_relative './app.rb'
-require "stackprof"
 
-use StackProf::Middleware, enabled: true,
-                           mode: :wall,
-                           interval: 1000,
-                           save_every: 5
+if ENV["ENABLE_STACKPROF"]
+  require "stackprof"
+  use StackProf::Middleware, enabled: true,
+                             mode: :wall,
+                             interval: 1000,
+                             save_every: 5
+end
 
 if ENV["ENABLE_LINEPROF"]
   require "rack-lineprof"
