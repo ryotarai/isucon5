@@ -1,0 +1,14 @@
+#!/usr/bin/env ruby
+require 'pathname'
+require 'fileutils'
+
+FILES = %w!/var/log/nginx/access.log!
+LOG_DIR = Pathname.new('/home/isucon/repo/logs')
+
+FILES.each do |f|
+  f = Pathname.new(f)
+  dest = LOG_DIR + Pathname.new(Time.now.strftime('%H%M%S')) + f.relative_path_from(Pathname.new('/'))
+  FileUtils.mkdir_p(dest.dirname.to_s)
+  FileUtils.cp(f.to_s, dest.to_s)
+  f.write('')
+end
