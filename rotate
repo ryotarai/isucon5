@@ -1,14 +1,26 @@
-#!/usr/bin/env ruby
+#!/home/isucon/.local/ruby/bin/ruby
 require 'pathname'
 require 'fileutils'
 
 FILES = %w!/var/log/nginx/access.log!
+DIRS = %w!/home/isucon/webapp/ruby/tmp!
+
 LOG_DIR = Pathname.new('/home/isucon/repo/logs')
 
 FILES.each do |f|
   f = Pathname.new(f)
-  dest = LOG_DIR + Pathname.new(Time.now.strftime('%H%M%S')) + f.relative_path_from(Pathname.new('/'))
-  FileUtils.mkdir_p(dest.dirname.to_s)
+  filename = (Pathname.new(Time.now.strftime('%H%M%S')) + f.relative_path_from(Pathname.new('/'))).to_s.gsub("/", "_")
+  dest = LOG_DIR + Pathname.new(filename)
+  p f, dest
   FileUtils.cp(f.to_s, dest.to_s)
   f.write('')
 end
+
+# DIRS.each do |f|
+#   f = Pathname.new(f)
+#   dest = LOG_DIR + Pathname.new(Time.now.strftime('%H%M%S')) + f.relative_path_from(Pathname.new('/'))
+#   FileUtils.mkdir_p(dest.dirname.to_s)
+#   FileUtils.cp_r(f.to_s, dest.to_s)
+#   FileUtils.rm_rf(f.to_s)
+#   FileUtils.mkdir(f.to_s)
+# end
