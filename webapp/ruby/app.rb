@@ -27,16 +27,16 @@ class Isucon5f::WebApp < Sinatra::Base
 
   SALT_CHARS = [('a'..'z'),('A'..'Z'),('0'..'9')].map(&:to_a).reduce(&:+)
 
-  Endpoint = Struct.new(:meth, :token_type, :token_key, :uri)
+  Endpoint = Struct.new(:token_type, :token_key, :uri)
 
   ENDPOINTS = {
-    'ken' =>  Endpoint.new('GET', nil, nil, 'http://api.five-final.isucon.net:8080/%s'),
-    'ken2' => Endpoint.new('GET', nil, nil, 'http://api.five-final.isucon.net:8080/'),
-    'surname' => Endpoint.new('GET', nil, nil, 'http://api.five-final.isucon.net:8081/surname'),
-    'givenname' => Endpoint.new('GET', nil, nil, 'http://api.five-final.isucon.net:8081/givenname'),
-    'tenki' => Endpoint.new('GET', 'param', 'zipcode', 'http://api.five-final.isucon.net:8988/'),
-    'perfectsec' => Endpoint.new('GET', 'header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/tokens'),
-    'perfectsec_attacked' => Endpoint.new('GET', 'header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/attacked_list'),
+    'ken' =>  Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/'),
+    'ken2' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/'),
+    'surname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/surname'),
+    'givenname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/givenname'),
+    'tenki' => Endpoint.new('param', 'zipcode', 'http://api.five-final.isucon.net:8988/'),
+    'perfectsec' => Endpoint.new('header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/tokens'),
+    'perfectsec_attacked' => Endpoint.new('header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/attacked_list'),
   }
 
   CLIENT = HTTPClient.new
@@ -205,18 +205,12 @@ SQL
     redirect '/modify'
   end
 
-  def fetch_api(method, uri, headers, params)
-    fetcher = case method
-              when 'GET' then CLIENT.method(:get_content)
-              when 'POST' then CLIENT.method(:post_content)
-              else
-                raise "unknown method #{method}"
-              end
-    res = fetcher.call(uri, params, headers)
+  def fetch_api(uri, headers, params)
+    res = CLIENT.get_content(uri, params, headers)
     JSON.parse(res)
   end
 
-  def fetch_api_with_cache(service, method, uri, headers, params)
+  def fetch_api_with_cache(service, uri, headers, params)
     case service
     when 'ken2'
       cache_key = "ken2:#{params['zipcode']}"
@@ -224,12 +218,12 @@ SQL
       if data
         JSON.parse(data)
       else
-        data = fetch_api(method, uri, headers, params)
+        data = fetch_api(uri, headers, params)
         REDIS_CLIENT.set(cache_key, JSON.dump(data))
         data
       end
     else
-      fetch_api(method, uri, headers, params)
+      fetch_api(uri, headers, params)
     end
   end
 
@@ -254,7 +248,7 @@ SQL
       when 'param' then params[endpoint.token_key] = conf['token']
       end
       uri = sprintf(endpoint.uri, *conf['keys'])
-      data << {"service" => service, "data" => fetch_api_with_cache(service, endpoint.meth, uri, headers, params)}
+      data << {"service" => service, "data" => fetch_api_with_cache(service, uri, headers, params)}
     end
 
     json data
