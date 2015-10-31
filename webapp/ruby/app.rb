@@ -209,17 +209,28 @@ SQL
     JSON.parse(res)
   end
 
+  def cache_json(cache_key)
+    data = REDIS_CLIENT.get(cache_key)
+    if data
+      JSON.parse(data)
+    else
+      data = yield
+      REDIS_CLIENT.set(cache_key, JSON.dump(data))
+      data
+    end
+  end
+
   def fetch_api_with_cache(service, uri, headers, params)
     case service
     when 'ken2'
       cache_key = "ken2:#{params['zipcode']}"
-      data = REDIS_CLIENT.get(cache_key)
-      if data
-        JSON.parse(data)
-      else
-        data = fetch_api(uri, headers, params)
-        REDIS_CLIENT.set(cache_key, JSON.dump(data))
-        data
+      cache_json(cache_key) do
+        fetch_api(uri, headers, params)
+      end
+    when 'surname', 'givenname'
+      cache_key = "#{service}:#{params['q']}"
+      cache_json(cache_key) do
+        fetch_api(uri, headers, params)
       end
     else
       fetch_api(uri, headers, params)
