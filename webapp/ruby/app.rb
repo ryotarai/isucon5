@@ -26,9 +26,19 @@ class Isucon5f::WebApp < Sinatra::Base
 
   SALT_CHARS = [('a'..'z'),('A'..'Z'),('0'..'9')].map(&:to_a).reduce(&:+)
 
+  Endpoint = Struct.new(:token_type, :token_key, :uri)
+
+  ENDPOINTS = {
+    'ken2' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8080/'),
+    'surname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/surname'),
+    'givenname' => Endpoint.new(nil, nil, 'http://api.five-final.isucon.net:8081/givenname'),
+    'tenki' => Endpoint.new('param', 'zipcode', 'http://api.five-final.isucon.net:8988/'),
+    'perfectsec' => Endpoint.new('header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/tokens'),
+    'perfectsec_attacked' => Endpoint.new('header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/attacked_list'),
+  }
+
   CLIENT = HTTPClient.new
   CLIENT.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
-
 
   EXPEDITOR_SERVICE = Expeditor::Service.new(
       executor: Concurrent::ThreadPoolExecutor.new(
@@ -37,6 +47,8 @@ class Isucon5f::WebApp < Sinatra::Base
           max_queue: 0,
       )
   )
+  # redis is thread-safe
+  REDIS_CLIENT = Redis.new(host: 'localhost', port: 6379)
 
   helpers do
     def config
@@ -63,14 +75,6 @@ class Isucon5f::WebApp < Sinatra::Base
       )
       Thread.current[:isucon5_db] = conn
       conn
-    end
-
-    def redis
-      # redis is thread-safe
-      @redis ||= Redis.new(
-        host: 'localhost',
-        port: 6379,
-      )
     end
 
     def authenticate(email, password)
@@ -206,31 +210,36 @@ SQL
     redirect '/modify'
   end
 
-  def fetch_api(method, uri, headers, params)
-    fetcher = case method
-              when 'GET' then CLIENT.method(:get_content)
-              when 'POST' then CLIENT.method(:post_content)
-              else
-                raise "unknown method #{method}"
-              end
-    res = fetcher.call(uri, params, headers)
+  def fetch_api(uri, headers, params)
+    res = CLIENT.get_content(uri, params, headers)
     JSON.parse(res)
   end
 
-  def fetch_api_with_cache(service, method, uri, headers, params)
+  def cache_json(cache_key)
+    data = REDIS_CLIENT.get(cache_key)
+    if data
+      JSON.parse(data)
+    else
+      data = yield
+      REDIS_CLIENT.set(cache_key, JSON.dump(data))
+      data
+    end
+  end
+
+  def fetch_api_with_cache(service, uri, headers, params)
     case service
     when 'ken2'
       cache_key = "ken2:#{params['zipcode']}"
-      data = redis.get(cache_key)
-      if data
-        JSON.parse(data)
-      else
-        data = fetch_api(method, uri, headers, params)
-        redis.set(cache_key, JSON.dump(data))
-        data
+      cache_json(cache_key) do
+        fetch_api(uri, headers, params)
+      end
+    when 'surname', 'givenname'
+      cache_key = "#{service}:#{params['q']}"
+      cache_json(cache_key) do
+        fetch_api(uri, headers, params)
       end
     else
-      fetch_api(method, uri, headers, params)
+      fetch_api(uri, headers, params)
     end
   end
 
@@ -246,21 +255,26 @@ SQL
 
     commands = []
 
-    arg.each_pair do |service, conf|
+    arg.each_pair do |service_orig, conf|
       command = Expeditor::Command.new(service: EXPEDITOR_SERVICE, timeout: 5) do
-        puts "XXXX #{service} #{conf}"
         begin
-          row = db.exec_params("SELECT meth, token_type, token_key, uri FROM endpoints WHERE service=$1", [service]).values.first
-          method, token_type, token_key, uri_template = row
-          p row
+          service =
+              if service_orig == 'ken'.freeze
+                'ken2'
+              else
+                service_orig
+              end
+          endpoint = ENDPOINTS.fetch(service)
           headers = {}
           params = (conf['params'] && conf['params'].dup) || {}
-          case token_type
-            when 'header' then headers[token_key] = conf['token']
-            when 'param' then params[token_key] = conf['token']
+          case endpoint.token_type
+            when 'header' then headers[endpoint.token_key] = conf['token']
+            when 'param' then params[endpoint.token_key] = conf['token']
           end
-          uri = sprintf(uri_template, *conf['keys'])
-           {"service" => service, "data" => fetch_api_with_cache(service, method, uri, headers, params)}
+          if service_orig == 'ken'.freeze
+            params['zipcode'] = conf['keys'][0]
+          end
+          {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
         rescue StandardError => e
           # Expeditor::DependencyErrorはエラーをもってないっぽいのでここで
           puts e
@@ -271,7 +285,7 @@ SQL
       commands << command
     end
 
-    master = Expeditor::Command.new(timeout: 10, dependencies: [commands[0]], service: EXPEDITOR_SERVICE) do |result|
+    master = Expeditor::Command.new(timeout: 10, dependencies: commands, service: EXPEDITOR_SERVICE) do |*result|
         result
     end
     master.start
