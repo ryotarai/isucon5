@@ -278,6 +278,10 @@ SQL
     file = File.expand_path("../../sql/initialize.sql", __FILE__)
     system("psql", "-f", file, "isucon5f")
 
+    db.exec_params('SELECT user_id,arg FROM subscriptions').values.each do |user_id, arg|
+      put_subscriptions(user_id, JSON.parse(arg))
+    end
 
+    'ok'
   end
 end
