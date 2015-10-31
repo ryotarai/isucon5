@@ -281,6 +281,14 @@ class Isucon5f::WebApp < Sinatra::Base
       cache_json(cache_key, validator) do
         fetch_api(uri, headers, params)
       end
+    when 'perfectsec_attacked'
+      cache_key = "#{service}:#{headers['X-PERFECT-SECURITY-TOKEN']}"
+      validator = proc do |data|
+        (Time.now.to_f - data['updated_at'].to_f) < 20.0
+      end
+      cache_json(cache_key, validator) do
+        fetch_api(uri, headers, params)
+      end
     else
       fetch_api(uri, headers, params)
     end
