@@ -312,24 +312,23 @@ class Isucon5f::WebApp < Sinatra::Base
         data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
       else
         # HTTPは並列化する
-        commands << Expeditor::Command.new(service: EXPEDITOR_SERVICE) do
+        command = Expeditor::Command.new(service: EXPEDITOR_SERVICE) do
           begin
-          data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
+           {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
           rescue => e
             STDERR.puts(e)
             STDERR.puts(e.backtrace.join("\n"))
             raise e
           end
-          nil
         end
+        command.start
+        commands << command
       end
     end
 
-    master = Expeditor::Command.new(dependencies: commands, service: EXPEDITOR_SERVICE) do
-      # noop
+    commans.each do |c|
+      data << c.get
     end
-    master.start
-    master.get
 
     json data
   end
