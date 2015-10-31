@@ -26,6 +26,9 @@ class Isucon5f::WebApp < Sinatra::Base
 
   SALT_CHARS = [('a'..'z'),('A'..'Z'),('0'..'9')].map(&:to_a).reduce(&:+)
 
+  CLIENT = HTTPClient.new
+  CLIENT.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
+
   helpers do
     def config
       @config ||= {
@@ -187,14 +190,9 @@ SQL
   end
 
   def fetch_api(method, uri, headers, params)
-    # HTTPClient毎回つくってるの意味ない
-    client = HTTPClient.new
-    if uri.start_with? "https://"
-      client.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
-    end
     fetcher = case method
-              when 'GET' then client.method(:get_content)
-              when 'POST' then client.method(:post_content)
+              when 'GET' then CLIENT.method(:get_content)
+              when 'POST' then CLIENT.method(:post_content)
               else
                 raise "unknown method #{method}"
               end
