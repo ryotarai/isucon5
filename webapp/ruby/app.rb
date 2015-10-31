@@ -255,7 +255,7 @@ SQL
       if service_orig == 'ken'.freeze
         params['zipcode'] = conf['keys'][0]
       end
-      data << {"service" => service, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
+      data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
     end
 
     json data
