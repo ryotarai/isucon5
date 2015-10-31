@@ -326,7 +326,7 @@ class Isucon5f::WebApp < Sinatra::Base
       end
     end
 
-    commans.each do |c|
+    commands.each do |c|
       data << c.get
     end
 
