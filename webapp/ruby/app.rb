@@ -93,7 +93,7 @@ class Isucon5f::WebApp < Sinatra::Base
     def current_user
       return @user if @user
       return nil unless session[:user_id]
-      h = REDIS_CLIENT.hgetall("user:#{params[:user_id]}")
+      h = REDIS_CLIENT.hgetall("user:#{session[:user_id]}")
       @user = nil
       if h
         @user = {id: h['id'].to_i, email: h['email'], grade: h['grade']}
@@ -104,6 +104,7 @@ class Isucon5f::WebApp < Sinatra::Base
 
     def save_user(id, email, password, grade)
       key = "user:#{id}"
+      REDIS_CLIENT.hset(key, 'id', id)
       REDIS_CLIENT.hset(key, 'email', email)
       REDIS_CLIENT.hset(key, 'grade', grade)
       REDIS_CLIENT.set("email:#{email}:#{password}", id)
