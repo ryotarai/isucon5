@@ -7,9 +7,8 @@ require 'json' # ojのほうがはやそう
 require 'httpclient'
 require 'openssl'
 require 'redis'
-
-# bundle config build.pg --with-pg-config=<path to pg_config>
-# bundle install
+require 'concurrent'
+require 'expeditor'
 
 module Isucon5f
   module TimeWithoutZone
@@ -29,6 +28,15 @@ class Isucon5f::WebApp < Sinatra::Base
 
   CLIENT = HTTPClient.new
   CLIENT.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
+
+
+  EXPEDITOR_SERVICE = Expeditor::Service.new(
+      executor: Concurrent::ThreadPoolExecutor.new(
+          min_threads: 5,
+          max_threads: 5,
+          max_queue: 0,
+      )
+  )
 
   helpers do
     def config
@@ -236,22 +244,38 @@ SQL
     arg_json = db.exec_params("SELECT arg FROM subscriptions WHERE user_id=$1", [user[:id]]).values.first[0]
     arg = JSON.parse(arg_json)
 
-    data = []
+    commands = []
 
     arg.each_pair do |service, conf|
-      row = db.exec_params("SELECT meth, token_type, token_key, uri FROM endpoints WHERE service=$1", [service]).values.first
-      method, token_type, token_key, uri_template = row
-      headers = {}
-      params = (conf['params'] && conf['params'].dup) || {}
-      case token_type
-      when 'header' then headers[token_key] = conf['token']
-      when 'param' then params[token_key] = conf['token']
+      command = Expeditor::Command.new(service: EXPEDITOR_SERVICE, timeout: 5) do
+        puts "XXXX #{service} #{conf}"
+        begin
+          row = db.exec_params("SELECT meth, token_type, token_key, uri FROM endpoints WHERE service=$1", [service]).values.first
+          method, token_type, token_key, uri_template = row
+          p row
+          headers = {}
+          params = (conf['params'] && conf['params'].dup) || {}
+          case token_type
+            when 'header' then headers[token_key] = conf['token']
+            when 'param' then params[token_key] = conf['token']
+          end
+          uri = sprintf(uri_template, *conf['keys'])
+           {"service" => service, "data" => fetch_api_with_cache(service, method, uri, headers, params)}
+        rescue StandardError => e
+          # Expeditor::DependencyErrorはエラーをもってないっぽいのでここで
+          puts e
+          puts e.backtrace.join("\n")
+          raise e
+        end
       end
-      uri = sprintf(uri_template, *conf['keys'])
-      data << {"service" => service, "data" => fetch_api_with_cache(service, method, uri, headers, params)}
+      commands << command
     end
 
-    json data
+    master = Expeditor::Command.new(timeout: 10, dependencies: [commands[0]], service: EXPEDITOR_SERVICE) do |result|
+        result
+    end
+    master.start
+    json master.get
   end
 
   get '/initialize' do
