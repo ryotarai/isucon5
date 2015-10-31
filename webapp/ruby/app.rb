@@ -79,13 +79,11 @@ class Isucon5f::WebApp < Sinatra::Base
     end
 
     def authenticate(email, password)
-      return nil unless email.split('@').first == password
-
       query = <<SQL
-SELECT id, email, grade FROM users WHERE email=$1
+SELECT id, email, grade FROM users WHERE email=$1 AND passhash=digest(salt || $2, 'sha512')
 SQL
       user = nil
-      db.exec_params(query, [email]) do |result|
+      db.exec_params(query, [email, password]) do |result|
         result.each do |tuple|
           user = {id: tuple['id'].to_i, email: tuple['email'], grade: tuple['grade']}
         end
@@ -125,7 +123,7 @@ SQL
     email, password, grade = params['email'], params['password'], params['grade']
     salt = generate_salt
     insert_user_query = <<SQL
-INSERT INTO users (email,salt,passhash,grade) VALUES ($1,$2,'',$5) RETURNING id
+INSERT INTO users (email,salt,passhash,grade) VALUES ($1,$2,digest($3 || $4, 'sha512'),$5) RETURNING id
 SQL
     default_arg = {}
     insert_subscription_query = <<SQL
