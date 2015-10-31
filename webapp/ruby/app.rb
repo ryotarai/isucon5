@@ -232,9 +232,9 @@ class Isucon5f::WebApp < Sinatra::Base
   end
 
   def fetch_api(uri, headers, params)
-    t0 = Time.now
+    #t0 = Time.now
     res = CLIENT.get_content(uri, params, headers)
-    puts "#{Time.now - t0} - #{uri} - #{res}"
+    #puts "#{Time.now - t0} - #{uri} - #{res}"
     Oj.load(res)
   end
 
