@@ -132,6 +132,9 @@ class Isucon5f::WebApp < Sinatra::Base
 
     def fetch_subscriptions(user_id)
       json = REDIS_CLIENT.get("subscriptions:#{user_id}")
+      unless json
+        raise "No subscriptions for #{user_id}"
+      end
       Oj.load(json)
     end
 
