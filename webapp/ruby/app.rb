@@ -27,6 +27,18 @@ class Isucon5f::WebApp < Sinatra::Base
 
   SALT_CHARS = [('a'..'z'),('A'..'Z'),('0'..'9')].map(&:to_a).reduce(&:+)
 
+  Endpoint = Struct.new(:meth, :token_type, :token_key, :uri)
+
+  ENDPOINTS = {
+    'ken' =>  Endpoint.new('GET', nil, nil, 'http://api.five-final.isucon.net:8080/%s'),
+    'ken2' => Endpoint.new('GET', nil, nil, 'http://api.five-final.isucon.net:8080/'),
+    'surname' => Endpoint.new('GET', nil, nil, 'http://api.five-final.isucon.net:8081/surname'),
+    'givenname' => Endpoint.new('GET', nil, nil, 'http://api.five-final.isucon.net:8081/givenname'),
+    'tenki' => Endpoint.new('GET', 'param', 'zipcode', 'http://api.five-final.isucon.net:8988/'),
+    'perfectsec' => Endpoint.new('GET', 'header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/tokens'),
+    'perfectsec_attacked' => Endpoint.new('GET', 'header', 'X-PERFECT-SECURITY-TOKEN', 'https://api.five-final.isucon.net:8443/attacked_list'),
+  }
+
   CLIENT = HTTPClient.new
   CLIENT.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
@@ -234,16 +246,15 @@ SQL
     data = []
 
     arg.each_pair do |service, conf|
-      row = db.exec_params("SELECT meth, token_type, token_key, uri FROM endpoints WHERE service=$1", [service]).values.first
-      method, token_type, token_key, uri_template = row
+      endpoint = ENDPOINTS.fetch(service)
       headers = {}
       params = (conf['params'] && conf['params'].dup) || {}
-      case token_type
-      when 'header' then headers[token_key] = conf['token']
-      when 'param' then params[token_key] = conf['token']
+      case endpoint.token_type
+      when 'header' then headers[endpoint.token_key] = conf['token']
+      when 'param' then params[endpoint.token_key] = conf['token']
       end
-      uri = sprintf(uri_template, *conf['keys'])
-      data << {"service" => service, "data" => fetch_api_with_cache(service, method, uri, headers, params)}
+      uri = sprintf(endpoint.uri, *conf['keys'])
+      data << {"service" => service, "data" => fetch_api_with_cache(service, endpoint.meth, uri, headers, params)}
     end
 
     json data
