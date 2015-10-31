@@ -265,7 +265,7 @@ SQL
           end
       endpoint = ENDPOINTS.fetch(service)
 
-      expeditor_service = endpoint.uri.match(/^https:/) ? nil : EXPEDITOR_SERVICE
+      expeditor_service = endpoint.uri.match(/^https:/) ? Expeditor::Services.default : EXPEDITOR_SERVICE
       command = Expeditor::Command.new(service: expeditor_service, timeout: 5) do
         begin
           headers = {}
