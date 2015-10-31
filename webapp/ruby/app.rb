@@ -97,6 +97,7 @@ class Isucon5f::WebApp < Sinatra::Base
       h = REDIS_CLIENT.hgetall("user:#{user_id}")
       user = {id: h['id'].to_i, email: h['email'], grade: h['grade']}
       session[:user_id] = user[:id]
+      $stderr.puts "Set current_user to #{user_id}: #{h}"
       user
     end
 
@@ -106,9 +107,11 @@ class Isucon5f::WebApp < Sinatra::Base
       h = REDIS_CLIENT.hgetall("user:#{session[:user_id]}")
       @user = nil
       if h
+        $stderr.puts "Get current_user by #{session[:user_id]}: #{h}"
         @user = {id: h['id'].to_i, email: h['email'], grade: h['grade']}
       else
         session.clear
+        nil
       end
     end
 
