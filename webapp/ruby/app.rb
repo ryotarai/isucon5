@@ -193,7 +193,7 @@ SQL
     param_name = params.has_key?("param_name") ? params["param_name"].strip : nil
     param_value = params.has_key?("param_value") ? params["param_value"].strip : nil
 
-    arg = get_subscriptions(user[:id])
+    arg = fetch_subscriptions(user[:id])
     arg[service] ||= {}
     arg[service]['token'] = token if token
     arg[service]['keys'] = keys if keys
@@ -244,10 +244,7 @@ SQL
       halt 403
     end
 
-    # user_id=json という構造なのでRedisでよさそう
-    # json例: {"ken":{"keys":["9593941"]},"ken2":{"params":{"zipcode":"4928178"}},"surname":{"params":{"q":"海老"}},"givenname":{"params":{"q":"さくの>      じょう"}},"tenki":{"token":"9593941"}}
-    arg_json = db.exec_params("SELECT arg FROM subscriptions WHERE user_id=$1", [user[:id]]).values.first[0]
-    arg = JSON.parse(arg_json)
+    arg = fetch_subscriptions(user[:id])
 
     data = []
 
