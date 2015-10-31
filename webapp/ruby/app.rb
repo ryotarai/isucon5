@@ -288,7 +288,11 @@ SQL
     master = Expeditor::Command.new(timeout: 10, dependencies: commands, service: EXPEDITOR_SERVICE) do |*result|
         result
     end
-    master.start
+    master.start_with_retry(
+        tries: 3,
+        sleep: 0.5,
+        on: [StandardError],
+    )
     json master.get
   end
 
