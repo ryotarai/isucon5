@@ -28,8 +28,10 @@ class Tenki
   CLIENT = HTTPClient.new
   CLIENT.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
-# redis is thread-safe
-  REDIS_CLIENT = Redis.new(host: 'localhost', port: 6379)
+  REDIS_CLIENT = Redis.new(
+      host: ENV['REDIS_HOST'] || 'localhost',
+      port: (ENV['REDIS_PORT'] || 6379).to_i,
+  )
 
   EXPEDITOR_SERVICE = Expeditor::Service.new(
       executor: Concurrent::ThreadPoolExecutor.new(
