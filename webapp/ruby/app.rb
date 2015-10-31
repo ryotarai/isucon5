@@ -7,6 +7,7 @@ require 'json' # ojのほうがはやそう
 require 'httpclient'
 require 'openssl'
 require 'redis'
+require 'redis/connection/hiredis'
 require 'concurrent'
 require 'expeditor'
 
