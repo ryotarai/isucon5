@@ -8,3 +8,4 @@ gem "unicorn"
 gem "httpclient"
 
 gem 'stackprof'
+gem 'rack-lineprof'
