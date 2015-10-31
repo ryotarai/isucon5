@@ -52,6 +52,13 @@ class Isucon5f::WebApp < Sinatra::Base
   # redis is thread-safe
   REDIS_CLIENT = Redis.new(host: 'localhost', port: 6379)
 
+  USERJS = {
+      'micro'    => 'var AIR_ISU_REFRESH_INTERVAL = 30000;',
+      'small'    => 'var AIR_ISU_REFRESH_INTERVAL = 30000;',
+      'standard' => 'var AIR_ISU_REFRESH_INTERVAL = 20000;',
+      'premium'  => 'var AIR_ISU_REFRESH_INTERVAL = 10000;',
+  }
+
   helpers do
     def config
       @config ||= {
@@ -181,7 +188,9 @@ class Isucon5f::WebApp < Sinatra::Base
 
   get '/user.js' do
     halt 403 unless current_user
-    erb :userjs, content_type: 'application/javascript', locals: {grade: current_user[:grade]}
+
+    content_type 'application/javascript'
+    USERJS[current_user[:grade]]
   end
 
   get '/modify' do
