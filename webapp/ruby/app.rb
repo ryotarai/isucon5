@@ -7,9 +7,8 @@ require 'json' # ojのほうがはやそう
 require 'httpclient'
 require 'openssl'
 require 'redis'
-
-# bundle config build.pg --with-pg-config=<path to pg_config>
-# bundle install
+require 'concurrent'
+require 'expeditor'
 
 module Isucon5f
   module TimeWithoutZone
@@ -41,6 +40,13 @@ class Isucon5f::WebApp < Sinatra::Base
   CLIENT = HTTPClient.new
   CLIENT.ssl_config.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
+  EXPEDITOR_SERVICE = Expeditor::Service.new(
+      executor: Concurrent::ThreadPoolExecutor.new(
+          min_threads: 5,
+          max_threads: 5,
+          max_queue: 0,
+      )
+  )
   # redis is thread-safe
   REDIS_CLIENT = Redis.new(host: 'localhost', port: 6379)
 
@@ -247,29 +253,43 @@ SQL
     arg_json = db.exec_params("SELECT arg FROM subscriptions WHERE user_id=$1", [user[:id]]).values.first[0]
     arg = JSON.parse(arg_json)
 
-    data = []
+    commands = []
 
     arg.each_pair do |service_orig, conf|
-      service =
-        if service_orig == 'ken'.freeze
-          'ken2'
-        else
-          service_orig
+      command = Expeditor::Command.new(service: EXPEDITOR_SERVICE, timeout: 5) do
+        begin
+          service =
+              if service_orig == 'ken'.freeze
+                'ken2'
+              else
+                service_orig
+              end
+          endpoint = ENDPOINTS.fetch(service)
+          headers = {}
+          params = (conf['params'] && conf['params'].dup) || {}
+          case endpoint.token_type
+            when 'header' then headers[endpoint.token_key] = conf['token']
+            when 'param' then params[endpoint.token_key] = conf['token']
+          end
+          if service_orig == 'ken'.freeze
+            params['zipcode'] = conf['keys'][0]
+          end
+          {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
+        rescue StandardError => e
+          # Expeditor::DependencyErrorはエラーをもってないっぽいのでここで
+          puts e
+          puts e.backtrace.join("\n")
+          raise e
         end
-      endpoint = ENDPOINTS.fetch(service)
-      headers = {}
-      params = (conf['params'] && conf['params'].dup) || {}
-      case endpoint.token_type
-      when 'header' then headers[endpoint.token_key] = conf['token']
-      when 'param' then params[endpoint.token_key] = conf['token']
       end
-      if service_orig == 'ken'.freeze
-        params['zipcode'] = conf['keys'][0]
-      end
-      data << {"service" => service_orig, "data" => fetch_api_with_cache(service, endpoint.uri, headers, params)}
+      commands << command
     end
 
-    json data
+    master = Expeditor::Command.new(timeout: 10, dependencies: commands, service: EXPEDITOR_SERVICE) do |*result|
+        result
+    end
+    master.start
+    json master.get
   end
 
   get '/initialize' do
