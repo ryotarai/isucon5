@@ -125,14 +125,14 @@ SQL
     email, password, grade = params['email'], params['password'], params['grade']
     salt = generate_salt
     insert_user_query = <<SQL
-INSERT INTO users (email,salt,passhash,grade) VALUES ($1,$2,'',$5) RETURNING id
+INSERT INTO users (email,salt,passhash,grade) VALUES ($1,$2,'',$3) RETURNING id
 SQL
     default_arg = {}
     insert_subscription_query = <<SQL
 INSERT INTO subscriptions (user_id,arg) VALUES ($1,$2)
 SQL
     db.transaction do |conn|
-      user_id = conn.exec_params(insert_user_query, [email,salt,salt,password,grade]).values.first.first
+      user_id = conn.exec_params(insert_user_query, [email,salt,grade]).values.first.first
       conn.exec_params(insert_subscription_query, [user_id, default_arg.to_json])
     end
     redirect '/login'
