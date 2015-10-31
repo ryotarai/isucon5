@@ -12,6 +12,10 @@ require 'concurrent'
 require 'expeditor'
 require 'time'
 
+require 'dotenv'
+Dotenv.load
+
+
 class Tenki
 
   Endpoint = Struct.new(:token_type, :token_key, :uri)
