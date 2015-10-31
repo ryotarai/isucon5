@@ -255,7 +255,7 @@ class Isucon5f::WebApp < Sinatra::Base
       conf['params'] ||= {}
       conf['params'][param_name] = param_value
     end
-    arg[service] = normalize_conf(conf)
+    arg[service] = normalize_conf(service, conf)
     put_subscriptions(user[:id], arg)
 
     redirect '/modify'
