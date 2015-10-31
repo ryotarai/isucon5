@@ -11,40 +11,31 @@ class Log
   end
 
   def endpoint
-    case @h['req']
-      # TODO
-    when %r{\AGET /initialize }
+    case [@h['method'], @h['uri']]
+    when ['GET', '/initialize']
       'GET /initialize'
-    when %r{\AGET /profile/[^/]+ }
-      'GET /profile/:account_name'
-    when %r{\AGET /login }
-      'GET /login'
-    when %r{\AGET /diary/entries/[^/]+ }
-      'GET /diary/entries/:account_name'
-    when %r{\AGET / }
+    when ['GET', '/']
       'GET /'
-    when %r{\APOST /login }
+    when ['GET', '/login']
+      'GET /login'
+    when ['POST', '/login']
       'POST /login'
-    when %r{\AGET /diary/entry/[^/]+ }
-      'GET /diary/entry/:entry_id'
-    when %r{\APOST /diary/comment/[^/]+ }
-      'POST /diary/comment/:entry_id'
-    when %r{\AGET /friends }
-      'GET /friends'
-    when %r{\APOST /friends/[^/]+ }
-      'POST /friends/:account_name'
-    when %r{\AGET /footprints }
-      'GET /footprints'
-    when %r{\APOST /diary/entry }
-      'POST /diary/entry'
-    when %r{\AGET /logout }
-      'GET /logout'
-    when %r{\APOST /profile/[^/]+ }
-      'POST /profile/:account_name'
-    when %r{\AGET /css/[^/]+ }
-      'GET /css'
-    when %r{\AGET /diary/entry/ }
-      'GET unknown'
+    when ['GET', '/signup']
+      'GET /signup'
+    when ['POST', '/signup']
+      'POST /signup'
+    when ['GET', '/user.js']
+      'GET /user.js'
+    when ['GET', '/data']
+      'GET /data'
+    when ['GET', '/modify']
+      'GET /modify'
+    when ['POST', '/modify']
+      'POST /modify'
+    when ['GET', '/css/bootstrap.min.css'], ['GET', '/css/signin.css'], ['GET', '/css/jumbotron-narrow.css']
+      'GET css'
+    when ['GET', '/js/jquery-1.11.3.js'], ['GET', '/js/bootstrap.js'], ['GET', '/js/airisu.js']
+      'GET js'
     end
   end
 end
