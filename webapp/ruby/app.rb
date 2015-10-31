@@ -237,7 +237,7 @@ class Isucon5f::WebApp < Sinatra::Base
       if valid
         return JSON.parse(data)
       end
-    else
+    end
 
     data = yield
     REDIS_CLIENT.set(cache_key, JSON.dump(data))
