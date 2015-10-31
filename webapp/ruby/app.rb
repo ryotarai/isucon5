@@ -10,6 +10,7 @@ require 'redis'
 require 'redis/connection/hiredis'
 require 'concurrent'
 require 'expeditor'
+require 'time'
 
 module Isucon5f
   module TimeWithoutZone
@@ -220,15 +221,26 @@ class Isucon5f::WebApp < Sinatra::Base
     JSON.parse(res)
   end
 
-  def cache_json(cache_key)
-    data = REDIS_CLIENT.get(cache_key)
-    if data
-      JSON.parse(data)
+  def cache_json(cache_key, validator = nil)
+    cached = REDIS_CLIENT.get(cache_key)
+    if cached
+      data = JSON.parse(cached)
+
+      valid = true
+      if validator
+        unless validator.call(data)
+          valid = false
+        end
+      end
+
+      if valid
+        return JSON.parse(data)
+      end
     else
-      data = yield
-      REDIS_CLIENT.set(cache_key, JSON.dump(data))
-      data
-    end
+
+    data = yield
+    REDIS_CLIENT.set(cache_key, JSON.dump(data))
+    data
   end
 
   def fetch_api_with_cache(service, uri, headers, params)
@@ -241,6 +253,15 @@ class Isucon5f::WebApp < Sinatra::Base
     when 'surname', 'givenname'
       cache_key = "#{service}:#{params['q']}"
       cache_json(cache_key) do
+        fetch_api(uri, headers, params)
+      end
+    when 'tenki'
+      cache_key = "#{service}:#{params['zipcode']}"
+      validator = proc do |data|
+        # TODO: Time#parse is maybe slow
+        (Time.now.to_f - Time.parse(data['date']).to_f) < 2.0
+      end
+      cache_json(cache_key, validator) do
         fetch_api(uri, headers, params)
       end
     else
