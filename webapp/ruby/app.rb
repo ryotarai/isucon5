@@ -50,7 +50,10 @@ class Isucon5f::WebApp < Sinatra::Base
       )
   )
   # redis is thread-safe
-  REDIS_CLIENT = Redis.new(host: 'localhost', port: 6379)
+  REDIS_CLIENT = Redis.new(
+    host: ENV['REDIS_HOST'] || 'localhost',
+    port: (ENV['REDIS_PORT'] || 6379).to_i,
+  )
 
   USERJS = {
       'micro'    => 'var AIR_ISU_REFRESH_INTERVAL = 30000;',
