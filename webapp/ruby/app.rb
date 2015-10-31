@@ -144,11 +144,9 @@ class Isucon5f::WebApp < Sinatra::Base
 
   post '/signup' do
     email, password, grade = params['email'], params['password'], params['grade']
-    REDIS_CLIENT.multi do
-      user_id = REDIS_CLIENT.get('last_user_id') + 1
-      save_user(user_id, email, password, grade)
-      REDIS_CLIENT.incr('last_user_id')
-    end
+    user_id = REDIS_CLIENT.get('last_user_id') + 1
+    save_user(user_id, email, password, grade)
+    REDIS_CLIENT.incr('last_user_id')
     default_arg = {}
     put_subscriptions(user_id, default_arg)
     redirect '/login'
