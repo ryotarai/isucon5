@@ -233,7 +233,7 @@ class Isucon5f::WebApp < Sinatra::Base
       end
 
       if valid
-        return JSON.parse(data)
+        return data
       end
     end
 
