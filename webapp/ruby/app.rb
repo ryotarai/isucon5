@@ -258,15 +258,17 @@ SQL
     commands = []
 
     arg.each_pair do |service_orig, conf|
-      command = Expeditor::Command.new(service: EXPEDITOR_SERVICE, timeout: 5) do
+      service =
+          if service_orig == 'ken'.freeze
+            'ken2'
+          else
+            service_orig
+          end
+      endpoint = ENDPOINTS.fetch(service)
+
+      expeditor_service = endpoint.uri.match(/^https:/) ? nil : EXPEDITOR_SERVICE
+      command = Expeditor::Command.new(service: expeditor_service, timeout: 5) do
         begin
-          service =
-              if service_orig == 'ken'.freeze
-                'ken2'
-              else
-                service_orig
-              end
-          endpoint = ENDPOINTS.fetch(service)
           headers = {}
           params = (conf['params'] && conf['params'].dup) || {}
           case endpoint.token_type
@@ -287,7 +289,7 @@ SQL
       commands << command
     end
 
-    master = Expeditor::Command.new(timeout: 10, dependencies: commands, service: EXPEDITOR_SERVICE) do |*result|
+    master = Expeditor::Command.new(timeout: 10, dependencies: commands) do |*result|
         result
     end
     master.start_with_retry(
